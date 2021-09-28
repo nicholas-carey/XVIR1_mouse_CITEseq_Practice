@@ -1,0 +1,58 @@
+---
+title: "Seurat_Practice_Mouse_Liver"
+author: "Nicholas Carey"
+date: "9/13/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+dir_prefix <- "/krummellab/data1/nicholascarey/mouse_liver/merged_E1_liver_singlets/pass_2/"
+```
+
+## Hackathon 2021
+
+This document is to practice working with Seurat.
+
+```{r packages, echo=FALSE}
+library(Seurat)
+library(dplyr)
+library(dittoSeq)
+library(ggplot2) 
+library(ggrepel)
+library(DESeq2)
+library(patchwork)
+```
+
+```{r read_data}
+load(paste0(dir_prefix,"merged_E1_liver_singlets_merged_processed_bsAMSd.RData"))
+```
+
+```{r annotate}
+annos <- c("junk or Neut",#0
+           "B",#1
+           "T",#2
+           "NK",#3
+           "B",#4
+           ,#5
+           "Macrophage",#6
+           "DC",#7
+           "Macrophage",#8
+           "pDC",#9
+           "Neutrophil",#10
+           "NK",#11
+           "B",#12
+           "B",#13
+           "Neutrophil",#14
+           "Macrophage",#15
+           "Non-Inflammatory Macrophage",#16
+           ,#17
+           ,#18
+           ,#19
+           ,#20
+           ,#21
+           ,#22
+           ,#23
+           ,#24
+           #25)
+```

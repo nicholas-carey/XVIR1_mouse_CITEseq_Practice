@@ -1,0 +1,16 @@
+---
+E1_adult_liver_SCG1:
+    GEX_datadir: /krummellab/data1/immunox/XVIR1/auxiliary_experiments/data/single_cell_GEX/processed/E1-adult-liver-SCG1/cellranger/
+    OUT_FOLDER: /krummellab/data1/nicholascarey/mouse_liver/adult/automated_processing/
+    SECONDARY_ASSAY_NAME: ADT
+    cells_loaded: 30000
+    SPECIES: mouse
+    UNMERGE_AB_PANEL_CSV: /krummellab/data1/nicholascarey/mouse_liver/adult/feature_reference_adult.csv
+
+E1_young_liver_SCG1:
+    GEX_datadir: /krummellab/data1/immunox/XVIR1/auxiliary_experiments/data/single_cell_GEX/processed/E1-young-liver-SCG1/cellranger/
+    OUT_FOLDER: /krummellab/data1/nicholascarey/mouse_liver/young/automated_processing/
+    SECONDARY_ASSAY_NAME: ADT
+    cells_loaded: 30000
+    SPECIES: mouse
+    UNMERGE_AB_PANEL_CSV: /krummellab/data1/nicholascarey/mouse_liver/young/feature_reference_young.csv
