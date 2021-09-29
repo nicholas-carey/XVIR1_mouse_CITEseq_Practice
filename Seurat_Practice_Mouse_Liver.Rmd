@@ -29,12 +29,12 @@ load(paste0(dir_prefix,"merged_E1_liver_singlets_merged_processed_bsAMSd.RData")
 ```
 
 ```{r annotate}
-annos <- c("junk or Neut",#0
+annos <- c("junk",#0
            "B",#1
            "T",#2
            "NK",#3
            "B",#4
-           ,#5
+           "T",#5 Proliferating
            "Macrophage",#6
            "DC",#7
            "Macrophage",#8
@@ -45,14 +45,34 @@ annos <- c("junk or Neut",#0
            "B",#13
            "Neutrophil",#14
            "Macrophage",#15
-           "Non-Inflammatory Macrophage",#16
-           ,#17
-           ,#18
-           ,#19
-           ,#20
-           ,#21
-           ,#22
-           ,#23
-           ,#24
-           #25)
+           "Macrophage",#16 non-inflammatory
+           "gdT",#17
+           "Macrophage",#18 CD163
+           "B",#19
+           "DC",#20
+           "HSC",#21
+           "Mast Cell",#22
+           "stroma"#23 maybe hepatocytes
+           )
+
+merged_data$anno_res0.8 <- as.character(merged_data$louvain_res0.8)
+for(i in 0:23){
+  merged_data@meta.data[merged_data$louvain_res0.8 == i, 'anno_res0.8'] <- annos[i+1]
+}
+merged_data$anno_res0.8 <- as.factor(merged_data$anno_res0.8)
+```
+
+```{r split_myelo_lympho}
+lymphoid <- c("B", "T", "NK", "gdT")
+myeloid <- c("DC", "pDC", "Macrophage", "Mast Cell", "Neutrophil")
+merged_lympho <- subset(merged_data, subset=anno_res0.8 %in% lymphoid)
+merged_myelo <- subset(merged_data, subset=anno_res0.8 %in% myeloid)
+
+save(merged_lympho, file="/krummellab/data1/nicholascarey/mouse_liver/merged_E1_liver_singlets/lymphoid/merged_E1_liver_singlets_merged_processed_bsAMSd_lymphoid.RData")
+
+save(merged_myelo, file="/krummellab/data1/nicholascarey/mouse_liver/merged_E1_liver_singlets/myeloid/merged_E1_liver_singlets_merged_processed_bsAMSd_myeloid.RData")
+```
+
+```{r reUMAP_by_compartment}
+
 ```
