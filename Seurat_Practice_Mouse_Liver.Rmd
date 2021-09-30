@@ -172,16 +172,16 @@ lympho_annos <- c("junk",#0
            "NK cell",#1 kinda weird tho
            "Plasma cell",#2 kinda weird
            "CD8 T cell",#3 
-           "B cell",#4 Lots of Ribosomal
+           "B cell",#4 Lots of Ribosomal also maybe a PC
            "Proliferating CD8 T cell",#5 these cells are more in G2M and S phase than the rest
                           #cell type maybe T8, higher CD28, CD8a, CD3e/d and others
            "CD4 T cell",#6 very high CD40L
-           "ILC",#7 both 2's and 3's
+           "ILC",#7 probably 3 maybe some 2's
            "Naive B cell",#8 high IgD
            "NKT cell",#9 could also be Effector CD8 T
            "IgA Plasma cell",#10
            "gdT cell",#11
-           "ILC",#12 both 2's and 3's
+           "ILC",#12 probably 1 because of IFNg
            "Treg",#13
            "junk"#14 Neutrophils or Macrophages maybe
 )
@@ -240,7 +240,7 @@ dev.off()
 ```
 
 ```{r playground}
-
+dittoDimPlot(merged_lympho, var='CD252--OX40L-Ligand', assay='ADT', split.by='louvain_res1')
 ```
 
 ```{r ages}
