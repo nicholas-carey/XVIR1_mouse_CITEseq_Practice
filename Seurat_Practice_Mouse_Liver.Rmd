@@ -134,6 +134,12 @@ save(merged_lympho, file=paste0(dir_prefix,"lymphoid/merged_E1_liver_singlets_me
 save(merged_myelo, file=paste0(dir_prefix,"myeloid/merged_E1_liver_singlets_merged_processed_bsAMSd_myeloid.RData"))
 ```
 
+```{r load_by_compartment}
+load(paste0(dir_prefix,"lymphoid/merged_E1_liver_singlets_merged_processed_bsAMSd_lymphoid.RData"))
+
+load(paste0(dir_prefix,"myeloid/merged_E1_liver_singlets_merged_processed_bsAMSd_myeloid.RData"))
+```
+
 ```{r UMAPS_by_compartment}
 png(filename=paste0(dir_prefix, 'lymphoid/louvain_res_1.png'), width = 5, height = 5, units = "in", res = 300)
 dittoDimPlot(merged_lympho, var='louvain_res1', do.label = TRUE)
@@ -166,6 +172,55 @@ myelo_markers_down <- myelo_markers %>% filter(avg_log2FC < 0)
 write.table(myelo_markers_up, file=paste0(dir_prefix, "myeloid/res1_markers_up.tsv"), sep="\t")
 write.table(myelo_markers_down, file=paste0(dir_prefix, "myeloid/res1_markers_down.tsv"), sep="\t")
 ```
+I am going to use Arjun's scoring of clusters using Zilionis et. al. 2019 to help me annotate the myeloid clusters. Zilionis has a few characterizations of lymphoid cell types, but it is primarily focused on myeloid cell types.
+```{r zilionis}
+source('../E1_scripts/zilionis_sigs.R')
+source('../E1_scripts/saturate.R')
+source('../aarao_scripts/R/BootstrappedAddModuleScore.R')
+for (sig in names(zilionis_mouse_sigs)) {
+  nb = 30
+  while (TRUE) {
+    try(merged_myelo <- BootstrappedAddModuleScore(merged_myelo,
+                                                  assay='RNA',
+                                                  features=list(zilionis_mouse_sigs[[sig]]),
+                                                  name=sig,
+                                                  nbin = nb,
+                                                  num_iters=100))
+    if (paste0(sig, '1') %in% colnames(merged_myelo@meta.data)) {
+      merged_myelo@meta.data[sig] <- merged_myelo@meta.data[paste0(sig, '1')]
+      merged_myelo@meta.data[paste0(sig, '1')] <- NULL
+      merged_myelo@meta.data[paste0(sig, '_75sat')] <- saturate(merged_myelo@meta.data[[sig]], sat=0.75, binary=T)
+      merged_myelo@meta.data[paste0(sig, '_95sat')] <- saturate(merged_myelo@meta.data[[sig]], sat=0.95, binary=T)
+      break
+    } else if (nb == 5) {
+      stop()
+    } else {
+      nb <- nb - 1
+    }
+  }
+}
+
+myelo_zili_95 <- colnames(merged_myelo@meta.data)[grepl(colnames(merged_myelo@meta.data), pattern = "_95sat$")]
+myelo_zili_75 <- colnames(merged_myelo@meta.data)[grepl(colnames(merged_myelo@meta.data), pattern = "_75sat$")]
+myelo_zili <- colnames(merged_myelo@meta.data)[(grepl(colnames(merged_myelo@meta.data), pattern = "^m")) & (!grepl(colnames(merged_myelo@meta.data), pattern = "_"))]
+
+png(filename=paste0(dir_prefix, 'myeloid/zilionis_dotplot_sat95_myeloid.png'), width = 10, height = 5, units = "in", res = 300)
+DotPlot(merged_myelo, features=myelo_zili_95, group.by='louvain_res1')+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1, size=10))
+dev.off()
+
+png(filename=paste0(dir_prefix, 'myeloid/zilionis_dotplot_sat75_myeloid.png'), width = 10, height = 5, units = "in", res = 300)
+DotPlot(merged_myelo, features=myelo_zili_75, group.by='louvain_res1')+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1, size=10))
+dev.off()
+
+png(filename=paste0(dir_prefix, 'myeloid/zilionis_dotplot_myeloid.png'), width = 10, height = 5, units = "in", res = 300)
+DotPlot(merged_myelo, features=myelo_zili, group.by='louvain_res1')+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1, size=10))
+dev.off()
+
+save(merged_myelo, file=paste0(dir_prefix,"myeloid/merged_E1_liver_singlets_merged_processed_bsAMSd_myeloid.RData"))
+```
 
 ```{r annos_by_compartment}
 lympho_annos <- c("junk",#0
@@ -176,18 +231,18 @@ lympho_annos <- c("junk",#0
            "Proliferating CD8 T cell",#5 these cells are more in G2M and S phase than the rest
                           #cell type maybe T8, higher CD28, CD8a, CD3e/d and others
            "CD4 T cell",#6 very high CD40L
-           "ILC",#7 probably 3 maybe some 2's
+           "ILC3",#7 probably 3 b/c Xcl1,Gzmc ;maybe some 2's
            "Naive B cell",#8 high IgD
            "NKT cell",#9 could also be Effector CD8 T
            "IgA Plasma cell",#10
            "gdT cell",#11
-           "ILC",#12 probably 1 because of IFNg
+           "ILC1",#12 probably 1 because of IFNg
            "Treg",#13
            "junk"#14 Neutrophils or Macrophages maybe
 )
 
 merged_lympho$anno_lympho_res1 <- as.character(merged_lympho$louvain_res1)
-for(i in 0:14){
+for(i in c(7,12)){
   merged_lympho@meta.data[merged_lympho$louvain_res1 == i,'anno_lympho_res1'] <- lympho_annos[i+1]
 }
 merged_lympho$anno_lympho_res1 <- as.factor(merged_lympho$anno_lympho_res1)
@@ -197,25 +252,36 @@ merged_lympho$anno_lympho_res1 <- droplevels(merged_lympho$anno_lympho_res1)
 
 Idents(merged_lympho) <- merged_lympho$anno_lympho_res1
 
-myelo_annos <- c("",#0
-           "",#1
-           "",#2
-           "",#3
-           "",#4
-           "",#5
-           "",#6
-           "",#7
-           "",#8
-           "",#9
-           "",#10
-           "",#11
-           "",#12
-           "",#13
-           "",#14
-           "",#15
-           "",#16
-           ""#17
+myelo_annos <- c("Inflammatory Kuppfer Cell",#0 F480, C1qa, C1qb
+           "Neutrophil",#1 IRF7
+           "Neutrophil",#2 high mt, junk/Neut
+           "Inflammatory Macrophage",#3
+           "DC",#4
+           "pDC",#5 pDC
+           "cDC1",#6 DC1, maybe migratory
+           "pDC",#7 pDC
+           "Macrophage 4",#8 Mac4
+           "Neutrophil",#9 Neutrophil (maybe Mono3)
+           "Endothelial",#10 
+           "Non-inflammatory Kuppfer Cell",#11 MoMacDC/Mac/maybe DC, has F480, Irf7, Clec4f, CD163
+           "DC3",#12 DC3
+           "Monocyte",#13 Mono2
+           "junk",#14 
+           "pre-BMP",#15 Basophil, high Gata2 and IL6, progenitor of Basophils and Mast Cells?
+           "Neutrophil",#16 Neutrophil/Mono3
+           "junk"#17
 )
+
+merged_myelo$anno_myelo_res1 <- as.character(merged_myelo$louvain_res1)
+for(i in 0:17){
+  merged_myelo@meta.data[merged_myelo$louvain_res1 == i,'anno_myelo_res1'] <- myelo_annos[i+1]
+}
+merged_myelo$anno_myelo_res1 <- as.factor(merged_myelo$anno_myelo_res1)
+
+merged_myelo <- subset(merged_myelo, subset=anno_myelo_res1!='junk')
+merged_myelo$anno_myelo_res1 <- droplevels(merged_myelo$anno_myelo_res1)
+
+Idents(merged_myelo) <- merged_myelo$anno_myelo_res1
 ```
 
 
@@ -231,16 +297,21 @@ dev.off()
 
 ```{r save_new}
 save(merged_lympho, file=paste0(dir_prefix, "lymphoid/merged_E1_liver_lymphoid_singlets_reannotated.RData"))
+save(merged_myelo, file=paste0(dir_prefix, "myeloid/merged_E1_liver_myeloid_singlets_reannotated.RData"))
 ```
 
 ```{r new_annos}
 png(filename=paste0(dir_prefix, 'lymphoid/new_annos_UMAP_lymphoid.png'), width = 7.5, height = 5, units = "in", res = 300)
 dittoDimPlot(merged_lympho, var='ident', do.label = TRUE)
 dev.off()
+
+png(filename=paste0(dir_prefix, 'myeloid/new_annos_UMAP_myeloid.png'), width = 7.5, height = 5, units = "in", res = 300)
+dittoDimPlot(merged_myelo, var='ident', do.label = FALSE)
+dev.off()
 ```
 
 ```{r playground}
-dittoDimPlot(merged_lympho, var='CD252--OX40L-Ligand', assay='ADT', split.by='louvain_res1')
+dittoDimPlot(merged_myelo, var='ident', do.label=FALSE)
 ```
 
 ```{r ages}
@@ -249,4 +320,10 @@ freq_by_age_lympho <- merged_lympho@meta.data %>% select(age, anno_lympho_res1) 
 
 freq_by_age_lympho <- t(freq_by_age_lympho)
 write.table(freq_by_age_lympho, file=paste0(dir_prefix, "lymphoid/cell_type_freq_by_age.csv"), sep=',')
+
+age_count_myelo <- as.vector(merged_myelo@meta.data %>% select(age) %>% table())
+freq_by_age_myelo <- merged_myelo@meta.data %>% select(age, anno_myelo_res1) %>% group_by(age) %>% table()/age_count_myelo
+
+freq_by_age_myelo <- t(freq_by_age_myelo)
+write.table(freq_by_age_myelo, file=paste0(dir_prefix, "myeloid/cell_type_freq_by_age.csv"), sep=',')
 ```
