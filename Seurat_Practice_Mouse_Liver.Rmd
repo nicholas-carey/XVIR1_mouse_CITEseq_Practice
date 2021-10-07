@@ -61,6 +61,13 @@ for(i in 0:23){
   merged_data@meta.data[merged_data$louvain_res0.8 == i, 'anno_res0.8'] <- annos[i+1]
 }
 merged_data$anno_res0.8 <- as.factor(merged_data$anno_res0.8)
+Idents(merged_data) <- merged_data$anno_res0.8
+
+png(filename=paste0(dir_prefix, 'pass_2/annotated_UMAP_louvain_res0.8.png'), width = 5, height = 5, units = "in", res = 300)
+dittoDimPlot(merged_data, var='ident', do.label = TRUE)
+dev.off()
+
+save(merged_data, file=paste0(dir_prefix,"pass_2/merged_E1_liver_singlets_merged_processed_bsAMSd_annotated.RData"))
 ```
 
 ```{r split_myelo_lympho}
@@ -300,6 +307,11 @@ save(merged_lympho, file=paste0(dir_prefix, "lymphoid/merged_E1_liver_lymphoid_s
 save(merged_myelo, file=paste0(dir_prefix, "myeloid/merged_E1_liver_myeloid_singlets_reannotated.RData"))
 ```
 
+```{r load_new}
+load(paste0(dir_prefix, "lymphoid/merged_E1_liver_lymphoid_singlets_reannotated.RData"))
+load(paste0(dir_prefix, "myeloid/merged_E1_liver_myeloid_singlets_reannotated.RData"))
+```
+
 ```{r new_annos}
 png(filename=paste0(dir_prefix, 'lymphoid/new_annos_UMAP_lymphoid.png'), width = 7.5, height = 5, units = "in", res = 300)
 dittoDimPlot(merged_lympho, var='ident', do.label = TRUE)
@@ -316,14 +328,98 @@ dittoDimPlot(merged_myelo, var='ident', do.label=FALSE)
 
 ```{r ages}
 age_count_lympho <- as.vector(merged_lympho@meta.data %>% select(age) %>% table())
+count_by_age_lympho <- merged_lympho@meta.data %>% select(age, anno_lympho_res1) %>% group_by(age) %>% table()
 freq_by_age_lympho <- merged_lympho@meta.data %>% select(age, anno_lympho_res1) %>% group_by(age) %>% table()/age_count_lympho
 
 freq_by_age_lympho <- t(freq_by_age_lympho)
 write.table(freq_by_age_lympho, file=paste0(dir_prefix, "lymphoid/cell_type_freq_by_age.csv"), sep=',')
+write.table(count_by_age_lympho, file=paste0(dir_prefix, "lymphoid/cell_type_count_by_age.csv"), sep=',')
 
 age_count_myelo <- as.vector(merged_myelo@meta.data %>% select(age) %>% table())
+count_by_age_myelo <- merged_myelo@meta.data %>% select(age, anno_myelo_res1) %>% group_by(age) %>% table()
 freq_by_age_myelo <- merged_myelo@meta.data %>% select(age, anno_myelo_res1) %>% group_by(age) %>% table()/age_count_myelo
 
 freq_by_age_myelo <- t(freq_by_age_myelo)
 write.table(freq_by_age_myelo, file=paste0(dir_prefix, "myeloid/cell_type_freq_by_age.csv"), sep=',')
+write.table(count_by_age_myelo, file=paste0(dir_prefix, "myeloid/cell_type_count_by_age.csv"), sep=',')
+
+tidy_count_by_age_lympho <- as.data.frame(count_by_age_lympho)
+tidy_count_by_age_myelo <- as.data.frame(count_by_age_myelo)
+```
+
+Note that with this re-concatenated data, the dimension reductions no longer makes sense. This should only be used to do things like look at the frequencies of annotations.
+```{r recombine_compartments}
+library(plyr)
+
+keep_cols <- c("orig.ident", "nCount_RNA", "nFeature_RNA", "nCount_ADT", 
+               "nFeature_ADT", "nCount_IDX", "nFeature_IDX", "percent.mt", 
+               "percent.ribo", "S.Score", "G2M.Score", "Phase", "SAMPLE.by.ABs",
+               "LIBRARY", "age", "full_merged_0.8_anno", "anno_lympho_res1", 
+               "anno_myelo_res1", "compartment")
+
+merged_lympho$compartment <- "lymphoid"
+merged_myelo$compartment <- "myeloid"
+
+remerged_meta <- rbind.fill(merged_lympho@meta.data, merged_myelo@meta.data) %>% select(all_of(keep_cols))
+
+remerged_meta$final_anno <- ""
+for(cell in 1:nrow(remerged_meta)){
+  if(is.na(remerged_meta[cell, 'anno_lympho_res1'])){
+    remerged_meta[cell, 'final_anno'] <- as.character(remerged_meta[cell, "anno_myelo_res1"])
+  }else{
+    remerged_meta[cell, 'final_anno'] <- as.character(remerged_meta[cell, "anno_lympho_res1"])
+  }
+}
+remerged_meta$final_anno <- as.factor(remerged_meta$final_anno)
+
+final_anno_tidy <- remerged_meta %>% select(age, final_anno) %>% group_by(age) %>% table() %>% as.data.frame()
+```
+
+```{r ages_plot}
+png(filename=paste0(dir_prefix, 'lymphoid/lympho_frequency_barplot_by_age.png'), width = 5, height = 5, units = "in", res = 300)
+dittoBarPlot(merged_lympho, var='anno_lympho_res1', group.by='age')+ylab("Percent of Lymphoid Cells")
+dev.off()
+
+png(filename=paste0(dir_prefix, 'myeloid/myelo_frequency_barplot_by_age.png'), width = 5, height = 5, units = "in", res = 300)
+dittoBarPlot(merged_myelo, var='anno_myelo_res1', group.by='age')+ylab("Percent of Myeloid Cells")
+dev.off()
+
+#dittoBoxPlot(merged_lympho, var='anno_lympho_res1', group.by='SAMPLE.by.ABs')
+
+final_anno_tidy$final_anno <- factor(final_anno_tidy$final_anno,
+                                     levels=c("B cell", "Plasma cell", "IgA Plasma cell",
+                                              "Naive B cell", "CD4 T cell", "Treg", "CD8 T cell", "gdT cell",
+                                              "Proliferating CD8 T cell", "NK cell", "NKT cell", "ILC1",
+                                              "ILC3", "cDC1", "DC", "DC3", "pDC", "Inflammatory Kuppfer Cell",
+                                              "Non-inflammatory Kuppfer Cell", "Inflammatory Macrophage", 
+                                              "Macrophage 4", "Monocyte", "Neutrophil", "pre-BMP", "Endothelial"))
+
+png(filename=paste0(dir_prefix, 'all_annos_frequency_barplot_by_age.png'), width = 7.5, height = 5, units = "in", res = 300)
+ggplot(data=final_anno_tidy, aes(fill=final_anno, y=Freq, x=age))+
+  geom_bar(position="fill", stat='identity')+
+  scale_fill_manual(values=head(dittoColors(), nlevels(final_anno_tidy$final_anno)))+
+  labs(y='Percent of Cells', x="")
+dev.off()
+```
+
+```{r boxplot_by_sample}
+final_anno_by_sample <- remerged_meta %>% select(SAMPLE.by.ABs, final_anno) %>% group_by(SAMPLE.by.ABs) %>% table() %>% as.data.frame()
+
+final_anno_by_sample$age <- ""
+
+for(r in 1:nrow(final_anno_by_sample)){
+  final_anno_by_sample[r, 'age'] <- strsplit(as.character(final_anno_by_sample[r, 'SAMPLE.by.ABs']), "-")[[1]][2]
+}
+
+final_anno_by_sample$age <- as.factor(final_anno_by_sample$age)
+
+for(type in unique(final_anno_by_sample$final_anno)){
+  png(filename=paste0(dir_prefix, type, '_boxplot.png'), width = 5, height = 5, units = "in", res = 300)
+  p <- ggplot(final_anno_by_sample[final_anno_by_sample$final_anno == type,], aes(x=age, y=Freq))+
+       geom_boxplot()+
+       geom_jitter(shape=16, position=position_jitter(0.01))+
+       labs(x='', y='Count', title=type)
+  print(p)
+  dev.off()
+}
 ```
