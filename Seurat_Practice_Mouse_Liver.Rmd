@@ -19,6 +19,7 @@ library(Seurat)
 library(dplyr)
 library(dittoSeq)
 library(ggplot2) 
+library(ggsignif)
 library(ggrepel)
 library(DESeq2)
 library(patchwork)
@@ -64,10 +65,14 @@ merged_data$anno_res0.8 <- as.factor(merged_data$anno_res0.8)
 Idents(merged_data) <- merged_data$anno_res0.8
 
 png(filename=paste0(dir_prefix, 'pass_2/annotated_UMAP_louvain_res0.8.png'), width = 5, height = 5, units = "in", res = 300)
-dittoDimPlot(merged_data, var='ident', do.label = TRUE)
+dittoDimPlot(merged_data, var='ident', do.label = TRUE)+labs(title="")
 dev.off()
 
 save(merged_data, file=paste0(dir_prefix,"pass_2/merged_E1_liver_singlets_merged_processed_bsAMSd_annotated.RData"))
+```
+
+```{r read_data_annotated}
+load(paste0(dir_prefix,"pass_2/merged_E1_liver_singlets_merged_processed_bsAMSd_annotated.RData"))
 ```
 
 ```{r split_myelo_lympho}
@@ -82,9 +87,9 @@ colnames(merged_lympho@meta.data) <- c(head(colnames(merged_lympho@meta.data), -
 merged_myelo@meta.data <- merged_myelo@meta.data[,!grepl(colnames(merged_myelo@meta.data), pattern="^(m|louvain|RNA|seurat)")]
 colnames(merged_myelo@meta.data) <- c(head(colnames(merged_myelo@meta.data), -1), "full_merged_0.8_anno")
 
-save(merged_lympho, file=paste0(dir_prefix,"lymphoid/merged_E1_liver_singlets_merged_processed_bsAMSd_lymphoid.RData"))
+save(merged_lympho, file=paste0(dir_prefix,"lymphoid2/merged_E1_liver_singlets_merged_processed_bsAMSd_lymphoid.RData"))
 
-save(merged_myelo, file=paste0(dir_prefix,"myeloid/merged_E1_liver_singlets_merged_processed_bsAMSd_myeloid.RData"))
+save(merged_myelo, file=paste0(dir_prefix,"myeloid2/merged_E1_liver_singlets_merged_processed_bsAMSd_myeloid.RData"))
 ```
 
 ```{r load_myelo_lympho}
@@ -95,7 +100,9 @@ load(paste0(dir_prefix,"myeloid/merged_E1_liver_singlets_merged_processed_bsAMSd
 
 ```{r recluster_lympho}
 recluster <- function(data){
-  data <- RunPCA(data, verbose=TRUE)
+  data <- FindVariableFeatures(data, selection.method = "vst", nfeatures = 3000)
+  data <- ScaleData(data, vars.to.regress=c('nCount_RNA', 'percent.mt', 'percent.ribo', 'S.Score', 'G2M.Score'), verbose = TRUE)
+  data <- RunPCA(data, npcs = 30, verbose = TRUE)
   data <- RunHarmony(data,
                      "LIBRARY",
                       assay.use='RNA',
@@ -136,24 +143,24 @@ merged_myelo <- recluster(merged_myelo)
 ```
 
 ```{r save_by_compartment}
-save(merged_lympho, file=paste0(dir_prefix,"lymphoid/merged_E1_liver_singlets_merged_processed_bsAMSd_lymphoid.RData"))
+save(merged_lympho, file=paste0(dir_prefix,"lymphoid2/merged_E1_liver_singlets_merged_processed_bsAMSd_lymphoid.RData"))
 
-save(merged_myelo, file=paste0(dir_prefix,"myeloid/merged_E1_liver_singlets_merged_processed_bsAMSd_myeloid.RData"))
+save(merged_myelo, file=paste0(dir_prefix,"myeloid2/merged_E1_liver_singlets_merged_processed_bsAMSd_myeloid.RData"))
 ```
 
 ```{r load_by_compartment}
-load(paste0(dir_prefix,"lymphoid/merged_E1_liver_singlets_merged_processed_bsAMSd_lymphoid.RData"))
+load(paste0(dir_prefix,"lymphoid2/merged_E1_liver_singlets_merged_processed_bsAMSd_lymphoid.RData"))
 
-load(paste0(dir_prefix,"myeloid/merged_E1_liver_singlets_merged_processed_bsAMSd_myeloid.RData"))
+load(paste0(dir_prefix,"myeloid2/merged_E1_liver_singlets_merged_processed_bsAMSd_myeloid.RData"))
 ```
 
 ```{r UMAPS_by_compartment}
-png(filename=paste0(dir_prefix, 'lymphoid/louvain_res_1.png'), width = 5, height = 5, units = "in", res = 300)
-dittoDimPlot(merged_lympho, var='louvain_res1', do.label = TRUE)
+png(filename=paste0(dir_prefix, 'lymphoid2/louvain_res_1.png'), width = 5, height = 5, units = "in", res = 300)
+dittoDimPlot(merged_lympho, var='louvain_res1', do.label = TRUE)+labs(title="Lymphoid Cells")
 dev.off()
 
-png(filename=paste0(dir_prefix, 'myeloid/louvain_res_1.png'), width = 5, height = 5, units = "in", res = 300)
-dittoDimPlot(merged_myelo, var='louvain_res1', do.label = TRUE)
+png(filename=paste0(dir_prefix, 'myeloid2/louvain_res_1.png'), width = 5, height = 5, units = "in", res = 300)
+dittoDimPlot(merged_myelo, var='louvain_res1', do.label = TRUE)+labs(title="Myeloid Cells")
 dev.off()
 ```
 
@@ -164,21 +171,22 @@ Idents(merged_myelo) <- merged_myelo$louvain_res1
 lympho_markers <- FindAllMarkers(merged_lympho,
                                  assay="RNA")
 lympho_markers <- lympho_markers %>% filter(p_val_adj < 0.05)
-write.table(lympho_markers, file=paste0(dir_prefix, "lymphoid/res1_markers.tsv"), sep="\t")
+write.table(lympho_markers, file=paste0(dir_prefix, "lymphoid2/res1_markers.tsv"), sep="\t")
 lympho_markers_up <- lympho_markers %>% filter(avg_log2FC > 0)
 lympho_markers_down <- lympho_markers %>% filter(avg_log2FC < 0)
-write.table(lympho_markers_up, file=paste0(dir_prefix, "lymphoid/res1_markers_up.tsv"), sep="\t")
-write.table(lympho_markers_down, file=paste0(dir_prefix, "lymphoid/res1_markers_down.tsv"), sep="\t")
+write.table(lympho_markers_up, file=paste0(dir_prefix, "lymphoid2/res1_markers_up.tsv"), sep="\t")
+write.table(lympho_markers_down, file=paste0(dir_prefix, "lymphoid2/res1_markers_down.tsv"), sep="\t")
 
 myelo_markers <-  FindAllMarkers(merged_myelo,
                                  assay="RNA")
 myelo_markers <- myelo_markers %>% filter(p_val_adj < 0.05)
-write.table(myelo_markers, file=paste0(dir_prefix, "myeloid/res1_markers.tsv"), sep="\t")
+write.table(myelo_markers, file=paste0(dir_prefix, "myeloid2/res1_markers.tsv"), sep="\t")
 myelo_markers_up <- myelo_markers %>% filter(avg_log2FC > 0)
 myelo_markers_down <- myelo_markers %>% filter(avg_log2FC < 0)
-write.table(myelo_markers_up, file=paste0(dir_prefix, "myeloid/res1_markers_up.tsv"), sep="\t")
-write.table(myelo_markers_down, file=paste0(dir_prefix, "myeloid/res1_markers_down.tsv"), sep="\t")
+write.table(myelo_markers_up, file=paste0(dir_prefix, "myeloid2/res1_markers_up.tsv"), sep="\t")
+write.table(myelo_markers_down, file=paste0(dir_prefix, "myeloid2/res1_markers_down.tsv"), sep="\t")
 ```
+
 I am going to use Arjun's scoring of clusters using Zilionis et. al. 2019 to help me annotate the myeloid clusters. Zilionis has a few characterizations of lymphoid cell types, but it is primarily focused on myeloid cell types.
 ```{r zilionis}
 source('../E1_scripts/zilionis_sigs.R')
@@ -211,25 +219,75 @@ myelo_zili_95 <- colnames(merged_myelo@meta.data)[grepl(colnames(merged_myelo@me
 myelo_zili_75 <- colnames(merged_myelo@meta.data)[grepl(colnames(merged_myelo@meta.data), pattern = "_75sat$")]
 myelo_zili <- colnames(merged_myelo@meta.data)[(grepl(colnames(merged_myelo@meta.data), pattern = "^m")) & (!grepl(colnames(merged_myelo@meta.data), pattern = "_"))]
 
-png(filename=paste0(dir_prefix, 'myeloid/zilionis_dotplot_sat95_myeloid.png'), width = 10, height = 5, units = "in", res = 300)
+png(filename=paste0(dir_prefix, 'myeloid2/zilionis_dotplot_sat95_myeloid.png'), width = 10, height = 5, units = "in", res = 300)
 DotPlot(merged_myelo, features=myelo_zili_95, group.by='louvain_res1')+
   theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1, size=10))
 dev.off()
 
-png(filename=paste0(dir_prefix, 'myeloid/zilionis_dotplot_sat75_myeloid.png'), width = 10, height = 5, units = "in", res = 300)
+png(filename=paste0(dir_prefix, 'myeloid2/zilionis_dotplot_sat75_myeloid.png'), width = 10, height = 5, units = "in", res = 300)
 DotPlot(merged_myelo, features=myelo_zili_75, group.by='louvain_res1')+
   theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1, size=10))
 dev.off()
 
-png(filename=paste0(dir_prefix, 'myeloid/zilionis_dotplot_myeloid.png'), width = 10, height = 5, units = "in", res = 300)
+png(filename=paste0(dir_prefix, 'myeloid2/zilionis_dotplot_myeloid.png'), width = 10, height = 5, units = "in", res = 300)
 DotPlot(merged_myelo, features=myelo_zili, group.by='louvain_res1')+
   theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1, size=10))
 dev.off()
 
-save(merged_myelo, file=paste0(dir_prefix,"myeloid/merged_E1_liver_singlets_merged_processed_bsAMSd_myeloid.RData"))
+save(merged_myelo, file=paste0(dir_prefix,"myeloid2/merged_E1_liver_singlets_merged_processed_bsAMSd_myeloid.RData"))
+
+##lymphoid
+
+for (sig in names(zilionis_mouse_sigs)) {
+  nb = 30
+  while (TRUE) {
+    try(merged_lympho <- BootstrappedAddModuleScore(merged_lympho,
+                                                  assay='RNA',
+                                                  features=list(zilionis_mouse_sigs[[sig]]),
+                                                  name=sig,
+                                                  nbin = nb,
+                                                  num_iters=100))
+    if (paste0(sig, '1') %in% colnames(merged_lympho@meta.data)) {
+      merged_lympho@meta.data[sig] <- merged_lympho@meta.data[paste0(sig, '1')]
+      merged_lympho@meta.data[paste0(sig, '1')] <- NULL
+      merged_lympho@meta.data[paste0(sig, '_75sat')] <- saturate(merged_lympho@meta.data[[sig]], sat=0.75, binary=T)
+      merged_lympho@meta.data[paste0(sig, '_95sat')] <- saturate(merged_lympho@meta.data[[sig]], sat=0.95, binary=T)
+      break
+    } else if (nb == 5) {
+      stop()
+    } else {
+      nb <- nb - 1
+    }
+  }
+}
+
+lympho_zili_95 <- colnames(merged_lympho@meta.data)[grepl(colnames(merged_lympho@meta.data), pattern = "_95sat$")]
+lympho_zili_75 <- colnames(merged_lympho@meta.data)[grepl(colnames(merged_lympho@meta.data), pattern = "_75sat$")]
+lympho_zili <- colnames(merged_lympho@meta.data)[(grepl(colnames(merged_lympho@meta.data), pattern = "^m")) & (!grepl(colnames(merged_lympho@meta.data), pattern = "_"))]
+
+png(filename=paste0(dir_prefix, 'lymphoid2/zilionis_dotplot_sat95_lymphoid.png'), width = 10, height = 5, units = "in", res = 300)
+DotPlot(merged_lympho, features=lympho_zili_95, group.by='louvain_res1')+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1, size=10))
+dev.off()
+
+png(filename=paste0(dir_prefix, 'lymphoid2/zilionis_dotplot_sat75_lymphoid.png'), width = 10, height = 5, units = "in", res = 300)
+DotPlot(merged_lympho, features=lympho_zili_75, group.by='louvain_res1')+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1, size=10))
+dev.off()
+
+png(filename=paste0(dir_prefix, 'lymphoid2/zilionis_dotplot_lymphoid.png'), width = 10, height = 5, units = "in", res = 300)
+DotPlot(merged_lympho, features=lympho_zili, group.by='louvain_res1')+
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1, size=10))
+dev.off()
+
+save(merged_lympho, file=paste0(dir_prefix,"lymphoid2/merged_E1_liver_singlets_merged_processed_bsAMSd_lymphoid.RData"))
 ```
 
-```{r annos_by_compartment}
+```{r load_myelo}
+load(paste0(dir_prefix,"myeloid2/merged_E1_liver_singlets_merged_processed_bsAMSd_myeloid.RData"))
+```
+
+```{r bad_annos}
 lympho_annos <- c("junk",#0
            "NK cell",#1 kinda weird tho
            "Plasma cell",#2 kinda weird
@@ -245,19 +303,8 @@ lympho_annos <- c("junk",#0
            "gdT cell",#11
            "ILC1",#12 probably 1 because of IFNg
            "Treg",#13
-           "junk"#14 Neutrophils or Macrophages maybe
+           "junk"#14 Neutrophils or Mono/Mac maybe
 )
-
-merged_lympho$anno_lympho_res1 <- as.character(merged_lympho$louvain_res1)
-for(i in c(7,12)){
-  merged_lympho@meta.data[merged_lympho$louvain_res1 == i,'anno_lympho_res1'] <- lympho_annos[i+1]
-}
-merged_lympho$anno_lympho_res1 <- as.factor(merged_lympho$anno_lympho_res1)
-
-merged_lympho <- subset(merged_lympho, subset=anno_lympho_res1!='junk')
-merged_lympho$anno_lympho_res1 <- droplevels(merged_lympho$anno_lympho_res1)
-
-Idents(merged_lympho) <- merged_lympho$anno_lympho_res1
 
 myelo_annos <- c("Inflammatory Kuppfer Cell",#0 F480, C1qa, C1qb
            "Neutrophil",#1 IRF7
@@ -278,6 +325,55 @@ myelo_annos <- c("Inflammatory Kuppfer Cell",#0 F480, C1qa, C1qb
            "Neutrophil",#16 Neutrophil/Mono3
            "junk"#17
 )
+```
+
+
+```{r annos_by_compartment}
+lympho_annos <- c("junk",#0
+           "NK",#1
+           "CD8 T",#2
+           "junk",#3 proliferating
+           "junk",#4 myeloid probably
+           "junk",#5 myeloid probably
+           "CD4 T",#6
+           "ILC",#7
+           "B",#8
+           "PC",#9
+           "gdT",#10
+           "ILC",#11 could also be NK?
+           "junk"#12 Neutrophils
+)
+
+merged_lympho$anno_lympho_res1 <- as.character(merged_lympho$louvain_res1)
+for(i in 0:12){
+  merged_lympho@meta.data[merged_lympho$louvain_res1 == i,'anno_lympho_res1'] <- lympho_annos[i+1]
+}
+merged_lympho$anno_lympho_res1 <- as.factor(merged_lympho$anno_lympho_res1)
+
+merged_lympho <- subset(merged_lympho, subset=anno_lympho_res1!='junk')
+merged_lympho$anno_lympho_res1 <- droplevels(merged_lympho$anno_lympho_res1)
+
+Idents(merged_lympho) <- merged_lympho$anno_lympho_res1
+
+myelo_annos <- c("KC",#0 C1q ... Inflammatory? IL1 and IL1r
+           "Neut",#1
+           "junk",#2 lympho
+           "junk",#3 lymphocytes, NK and B
+           "pDC",#4
+           "junk",#5 Neut
+           "cDC2",#6 
+           "Mac",#7 
+           "cDC1",#8 
+           "Neut",#9
+           "junk",#10 high mt
+           "junk",#11 Endothelial
+           "pDC",#12 
+           "Non-I KC",#13 Non-inflammatory
+           "Mono",#14 
+           "Mig. cDC",#15 
+           "Mast Cell",#16 
+           "Neut"#17
+)
 
 merged_myelo$anno_myelo_res1 <- as.character(merged_myelo$louvain_res1)
 for(i in 0:17){
@@ -292,7 +388,7 @@ Idents(merged_myelo) <- merged_myelo$anno_myelo_res1
 ```
 
 
-```{r old_annos}
+```{r old_annos, run=FALSE}
 png(filename=paste0(dir_prefix, 'lymphoid/old_annos_by_cluster.png'), width = 5, height = 5, units = "in", res = 300)
 dittoDimPlot(merged_lympho, var='full_merged_0.8_anno', split.by='ident')
 dev.off()
@@ -303,22 +399,22 @@ dev.off()
 ```
 
 ```{r save_new}
-save(merged_lympho, file=paste0(dir_prefix, "lymphoid/merged_E1_liver_lymphoid_singlets_reannotated.RData"))
-save(merged_myelo, file=paste0(dir_prefix, "myeloid/merged_E1_liver_myeloid_singlets_reannotated.RData"))
+save(merged_lympho, file=paste0(dir_prefix, "lymphoid2/merged_E1_liver_lymphoid_singlets_reannotated.RData"))
+save(merged_myelo, file=paste0(dir_prefix, "myeloid2/merged_E1_liver_myeloid_singlets_reannotated.RData"))
 ```
 
 ```{r load_new}
-load(paste0(dir_prefix, "lymphoid/merged_E1_liver_lymphoid_singlets_reannotated.RData"))
-load(paste0(dir_prefix, "myeloid/merged_E1_liver_myeloid_singlets_reannotated.RData"))
+load(paste0(dir_prefix, "lymphoid2/merged_E1_liver_lymphoid_singlets_reannotated.RData"))
+load(paste0(dir_prefix, "myeloid2/merged_E1_liver_myeloid_singlets_reannotated.RData"))
 ```
 
 ```{r new_annos}
-png(filename=paste0(dir_prefix, 'lymphoid/new_annos_UMAP_lymphoid.png'), width = 7.5, height = 5, units = "in", res = 300)
-dittoDimPlot(merged_lympho, var='ident', do.label = TRUE)
+png(filename=paste0(dir_prefix, 'lymphoid2/new_annos_UMAP_lymphoid.png'), width = 7.5, height = 5, units = "in", res = 300)
+dittoDimPlot(merged_lympho, var='ident', do.label = TRUE)+labs(title="Lymphoid Cells")
 dev.off()
 
-png(filename=paste0(dir_prefix, 'myeloid/new_annos_UMAP_myeloid.png'), width = 7.5, height = 5, units = "in", res = 300)
-dittoDimPlot(merged_myelo, var='ident', do.label = FALSE)
+png(filename=paste0(dir_prefix, 'myeloid2/new_annos_UMAP_myeloid.png'), width = 7.5, height = 5, units = "in", res = 300)
+dittoDimPlot(merged_myelo, var='ident', do.label = TRUE)+labs(title="Myeloid Cells")
 dev.off()
 ```
 
@@ -332,16 +428,16 @@ count_by_age_lympho <- merged_lympho@meta.data %>% select(age, anno_lympho_res1)
 freq_by_age_lympho <- merged_lympho@meta.data %>% select(age, anno_lympho_res1) %>% group_by(age) %>% table()/age_count_lympho
 
 freq_by_age_lympho <- t(freq_by_age_lympho)
-write.table(freq_by_age_lympho, file=paste0(dir_prefix, "lymphoid/cell_type_freq_by_age.csv"), sep=',')
-write.table(count_by_age_lympho, file=paste0(dir_prefix, "lymphoid/cell_type_count_by_age.csv"), sep=',')
+write.table(freq_by_age_lympho, file=paste0(dir_prefix, "lymphoid2/cell_type_freq_by_age.csv"), sep=',')
+write.table(count_by_age_lympho, file=paste0(dir_prefix, "lymphoid2/cell_type_count_by_age.csv"), sep=',')
 
 age_count_myelo <- as.vector(merged_myelo@meta.data %>% select(age) %>% table())
 count_by_age_myelo <- merged_myelo@meta.data %>% select(age, anno_myelo_res1) %>% group_by(age) %>% table()
 freq_by_age_myelo <- merged_myelo@meta.data %>% select(age, anno_myelo_res1) %>% group_by(age) %>% table()/age_count_myelo
 
 freq_by_age_myelo <- t(freq_by_age_myelo)
-write.table(freq_by_age_myelo, file=paste0(dir_prefix, "myeloid/cell_type_freq_by_age.csv"), sep=',')
-write.table(count_by_age_myelo, file=paste0(dir_prefix, "myeloid/cell_type_count_by_age.csv"), sep=',')
+write.table(freq_by_age_myelo, file=paste0(dir_prefix, "myeloid2/cell_type_freq_by_age.csv"), sep=',')
+write.table(count_by_age_myelo, file=paste0(dir_prefix, "myeloid2/cell_type_count_by_age.csv"), sep=',')
 
 tidy_count_by_age_lympho <- as.data.frame(count_by_age_lympho)
 tidy_count_by_age_myelo <- as.data.frame(count_by_age_myelo)
@@ -351,14 +447,14 @@ Note that with this re-concatenated data, the dimension reductions no longer mak
 ```{r recombine_compartments}
 library(plyr)
 
+merged_lympho$compartment <- "lymphoid"
+merged_myelo$compartment <- "myeloid"
+
 keep_cols <- c("orig.ident", "nCount_RNA", "nFeature_RNA", "nCount_ADT", 
                "nFeature_ADT", "nCount_IDX", "nFeature_IDX", "percent.mt", 
                "percent.ribo", "S.Score", "G2M.Score", "Phase", "SAMPLE.by.ABs",
                "LIBRARY", "age", "full_merged_0.8_anno", "anno_lympho_res1", 
                "anno_myelo_res1", "compartment")
-
-merged_lympho$compartment <- "lymphoid"
-merged_myelo$compartment <- "myeloid"
 
 remerged_meta <- rbind.fill(merged_lympho@meta.data, merged_myelo@meta.data) %>% select(all_of(keep_cols))
 
@@ -376,34 +472,43 @@ final_anno_tidy <- remerged_meta %>% select(age, final_anno) %>% group_by(age) %
 ```
 
 ```{r ages_plot}
-png(filename=paste0(dir_prefix, 'lymphoid/lympho_frequency_barplot_by_age.png'), width = 5, height = 5, units = "in", res = 300)
-dittoBarPlot(merged_lympho, var='anno_lympho_res1', group.by='age')+ylab("Percent of Lymphoid Cells")
+png(filename=paste0(dir_prefix, 'lymphoid2/lympho_frequency_barplot_by_age.png'), width = 5, height = 5, units = "in", res = 300)
+dittoBarPlot(merged_lympho, var='anno_lympho_res1', group.by='age')+labs(y="Percent of Lymphoid Cells",x="",title="Lymphoid Cell Type Frequency by Age")
 dev.off()
 
-png(filename=paste0(dir_prefix, 'myeloid/myelo_frequency_barplot_by_age.png'), width = 5, height = 5, units = "in", res = 300)
-dittoBarPlot(merged_myelo, var='anno_myelo_res1', group.by='age')+ylab("Percent of Myeloid Cells")
+png(filename=paste0(dir_prefix, 'myeloid2/myelo_frequency_barplot_by_age.png'), width = 5, height = 5, units = "in", res = 300)
+dittoBarPlot(merged_myelo, var='anno_myelo_res1', group.by='age')+labs(y="Percent of Myeloid Cells",x="",title="Myeloid Cell Type Frequency by Age")
 dev.off()
 
 #dittoBoxPlot(merged_lympho, var='anno_lympho_res1', group.by='SAMPLE.by.ABs')
 
 final_anno_tidy$final_anno <- factor(final_anno_tidy$final_anno,
-                                     levels=c("B cell", "Plasma cell", "IgA Plasma cell",
-                                              "Naive B cell", "CD4 T cell", "Treg", "CD8 T cell", "gdT cell",
-                                              "Proliferating CD8 T cell", "NK cell", "NKT cell", "ILC1",
-                                              "ILC3", "cDC1", "DC", "DC3", "pDC", "Inflammatory Kuppfer Cell",
-                                              "Non-inflammatory Kuppfer Cell", "Inflammatory Macrophage", 
-                                              "Macrophage 4", "Monocyte", "Neutrophil", "pre-BMP", "Endothelial"))
+                                     levels=c("B", "PC", "CD4 T", "CD8 T", "gdT",
+                                              "NK", "ILC", "cDC1", "cDC2", "Mig. cDC", "pDC", "KC",
+                                              "Non-I KC", "Mac", "Mono", "Mast Cell", "Neut"))
 
 png(filename=paste0(dir_prefix, 'all_annos_frequency_barplot_by_age.png'), width = 7.5, height = 5, units = "in", res = 300)
 ggplot(data=final_anno_tidy, aes(fill=final_anno, y=Freq, x=age))+
   geom_bar(position="fill", stat='identity')+
-  scale_fill_manual(values=head(dittoColors(), nlevels(final_anno_tidy$final_anno)))+
+  scale_fill_manual(values=head(dittoColors(), nlevels(final_anno_tidy$final_anno)), name = "Cell Type")+
   labs(y='Percent of Cells', x="")
 dev.off()
 ```
 
 ```{r boxplot_by_sample}
+cell_type_dictionary <- data.frame(cell_type = c("B", "PC", "CD4 T", "CD8 T", "gdT",
+                                              "NK", "ILC", "cDC1", "cDC2", "Mig. cDC", "pDC", "KC",
+                                              "Non-I KC", "Mac", "Mono", "Mast Cell", "Neut"),
+                                   full_name = c("B Cell", "Plasma Cell", "CD4+ T Cell", "CD8+ T Cell", "Gamma Delta T Cell",
+                                              "Natural Killer Cell", "Innate Lymphoid Cell", "Conventional Dendritic Cell 1",
+                                              "Conventional Dendritic Cell 2", "Migratory Conventional Dendritic Cell", "Plasmacytoid Dendritic Cell", 
+                                              "Inflammatory Kupffer Cell", "Non-Inflammatory Kupffer Cell", "Inflammatory Macrophage",
+                                              "Monocyte", "Mast Cell", "Neutrophil"))
+
+
+count_by_sample <- remerged_meta %>% select(SAMPLE.by.ABs) %>% table() %>% as.data.frame()
 final_anno_by_sample <- remerged_meta %>% select(SAMPLE.by.ABs, final_anno) %>% group_by(SAMPLE.by.ABs) %>% table() %>% as.data.frame()
+final_anno_by_sample$Freq <- final_anno_by_sample$Freq/count_by_sample$Freq
 
 final_anno_by_sample$age <- ""
 
@@ -414,11 +519,13 @@ for(r in 1:nrow(final_anno_by_sample)){
 final_anno_by_sample$age <- as.factor(final_anno_by_sample$age)
 
 for(type in unique(final_anno_by_sample$final_anno)){
-  png(filename=paste0(dir_prefix, type, '_boxplot.png'), width = 5, height = 5, units = "in", res = 300)
+  png(filename=paste0(dir_prefix, 'boxplots/', type, '_boxplot.png'), width = 5, height = 5, units = "in", res = 300)
   p <- ggplot(final_anno_by_sample[final_anno_by_sample$final_anno == type,], aes(x=age, y=Freq))+
-       geom_boxplot()+
-       geom_jitter(shape=16, position=position_jitter(0.01))+
-       labs(x='', y='Count', title=type)
+       geom_boxplot(outlier.shape = NA)+
+       geom_jitter(shape=19, position=position_jitter(0.03))+
+       geom_signif(test="wilcox.test",comparisons = list(c("adult", "young")), 
+              map_signif_level=TRUE)+
+       labs(x='', y="Percent of All Cells", title=cell_type_dictionary[cell_type_dictionary$cell_type == type, "full_name"])
   print(p)
   dev.off()
 }
